@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -138,3 +139,35 @@ def test_legacy_positional_invocation_still_analyzes(dockerfile, capsys):
 
     assert legacy_main([dockerfile(CLEAN)]) == EXIT_OK
     assert json.loads(capsys.readouterr().out)["status"] == "PASSED"
+
+
+def test_unreadable_path_reports_cleanly_not_a_traceback(tmp_path, capsys, monkeypatch):
+    """Any OSError must become a message, never a traceback.
+
+    A path containing characters the filesystem rejects raises EINVAL on
+    Windows rather than FileNotFoundError, and enumerating only the familiar
+    subclasses let everything else crash.
+    """
+    def explode(*args, **kwargs):
+        raise OSError(22, "Invalid argument")
+
+    monkeypatch.setattr(Path, "read_text", explode)
+    assert main(["analyze", str(tmp_path / "Dockerfile")]) == EXIT_INPUT
+    err = capsys.readouterr().err
+    assert "cannot read" in err
+    assert "Invalid argument" in err
+    assert "Traceback" not in err
+
+
+def test_non_utf8_file_reports_cleanly(tmp_path, capsys):
+    """Pointing the tool at a binary file must not raise UnicodeDecodeError."""
+    binary = tmp_path / "Dockerfile"
+    binary.write_bytes(b"\xff\xfe\x00\x01 not text at all")
+    assert main(["analyze", str(binary)]) == EXIT_INPUT
+    assert "not UTF-8 text" in capsys.readouterr().err
+
+
+@pytest.mark.skipif(os.name != "nt", reason="only Windows rejects these characters")
+def test_windows_illegal_path_characters_report_cleanly(capsys):
+    assert main(["analyze", r"C:\Users\nobody\<placeholder>\Dockerfile"]) == EXIT_INPUT
+    assert "Traceback" not in capsys.readouterr().err

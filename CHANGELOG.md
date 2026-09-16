@@ -24,6 +24,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   the agent's own audit, and a `.pre-commit-hooks.yaml` hook definition.
 
 ### Fixed
+- Any `OSError` now becomes a message instead of a traceback. The CLI caught
+  `FileNotFoundError`, `IsADirectoryError` and `PermissionError` by name and
+  let every other subclass crash -- a path containing characters the
+  filesystem rejects raises `EINVAL` on Windows, not `FileNotFoundError`, so
+  `stow analyze` printed a full Python traceback for a simple typo.
+- A non-UTF-8 file reports "is not UTF-8 text" rather than raising
+  `UnicodeDecodeError`. Pointing the tool at a binary file is an easy mistake
+  and was an unhandled crash.
 - `analyze`/`refactor` on a directory now report "is a directory, not a
   Dockerfile" on every platform. Linux raises `IsADirectoryError` when opening
   a directory and Windows raises `PermissionError`, so relying on the OS's
