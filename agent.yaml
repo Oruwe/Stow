@@ -2,3 +2,17 @@ spec_version: 0.1.0
 name: dockerfile-optimizer
 version: "1.0.0"
 description: Autonomous developer tool that analyzes Dockerfiles to optimize layer caching, multi-stage builds, and security posture.
+
+entrypoint: stow
+commands:
+  - name: analyze
+    description: Audit a Dockerfile and report findings as JSON, text or SARIF.
+  - name: refactor
+    description: Rewrite a Dockerfile, applying only mechanically safe transforms.
+  - name: rules
+    description: List the rule catalog with severities.
+
+capabilities:
+  network_access: false
+  filesystem_writes: opt-in   # only via `refactor --write` on the named path
+  executes_shell: false

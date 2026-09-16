@@ -1,17 +1,23 @@
 """Deterministic Dockerfile refactors.
 
-Each transform is mechanical: it fires only on a pattern it can rewrite without
+Every transform is mechanical: it fires only on a pattern it can rewrite without
 guessing at project intent. Anything it cannot rewrite safely is left alone and
 reported under `skipped`, so the caller always knows what was *not* done.
 """
-from typing import Dict, List, Tuple
+from __future__ import annotations
 
-from app.rules import CLEANUP_MARKERS, _image_token, _logical_lines
+import re
+from typing import Any
+
+from app.parser import image_reference, parse
+from app.rules import CLEANUP_MARKERS, ROOT_USERS
 
 APT_CLEANUP = "rm -rf /var/lib/apt/lists/*"
 BUILDER_PREFIX = "/install"
 DEFAULT_WORKDIR = "/app"
 NONROOT_UID = "1001"
+
+Transform = tuple[list[str], list[str]]
 
 
 def _keyword(instruction: str) -> str:
@@ -29,7 +35,7 @@ def _is_broad_copy(instruction: str) -> bool:
     if _keyword(instruction) != "COPY":
         return False
     args = [a for a in _argument(instruction).split() if not a.startswith("--")]
-    return len(args) == 2 and args[0] == "."
+    return len(args) == 2 and args[0] in (".", "./")
 
 
 def _pip_manifest(instruction: str) -> str:
@@ -37,13 +43,19 @@ def _pip_manifest(instruction: str) -> str:
     if _keyword(instruction) != "RUN" or "pip install" not in instruction:
         return ""
     tokens = instruction.split()
-    for flag, nxt in zip(tokens, tokens[1:]):
+    for flag, nxt in zip(tokens, tokens[1:], strict=False):
         if flag == "-r":
             return nxt
     return ""
 
 
-def harden_apt(instructions: List[str]) -> Tuple[List[str], List[str]]:
+def _final_stage_slice(instructions: list[str]) -> int:
+    """Index of the final FROM, or 0 when the file has no stages."""
+    froms = [i for i, x in enumerate(instructions) if _keyword(x) == "FROM"]
+    return froms[-1] if froms else 0
+
+
+def harden_apt(instructions: list[str]) -> Transform:
     """Add --no-install-recommends and list cleanup to apt layers."""
     applied, out = [], []
     for instruction in instructions:
@@ -61,7 +73,38 @@ def harden_apt(instructions: List[str]) -> Tuple[List[str], List[str]]:
     return out, applied
 
 
-def hoist_manifest(instructions: List[str]) -> Tuple[List[str], List[str]]:
+def harden_pip(instructions: list[str]) -> Transform:
+    """Stop pip persisting its wheel cache into the layer."""
+    applied, out = [], []
+    for instruction in instructions:
+        if (
+            _keyword(instruction) == "RUN"
+            and "pip install" in instruction
+            and "--no-cache-dir" not in instruction
+        ):
+            instruction = instruction.replace("pip install", "pip install --no-cache-dir", 1)
+            applied.append("PIP_NO_CACHE")
+        out.append(instruction)
+    return out, applied
+
+
+def add_to_copy(instructions: list[str]) -> Transform:
+    """Rewrite ADD to COPY for plain local paths, where the two are equivalent."""
+    applied, out = [], []
+    for instruction in instructions:
+        argument = _argument(instruction)
+        if (
+            _keyword(instruction) == "ADD"
+            and not re.search(r"https?://", argument)
+            and not re.search(r"\.(tar|tar\.gz|tgz|tar\.bz2|tar\.xz|zip)\b", argument)
+        ):
+            instruction = f"COPY {argument}"
+            applied.append("ADD_TO_COPY")
+        out.append(instruction)
+    return out, applied
+
+
+def hoist_manifest(instructions: list[str]) -> Transform:
     """Move `COPY . <dest>` below the dependency install so deps stay cached.
 
     Editing application source should not invalidate the dependency layer.
@@ -80,20 +123,32 @@ def hoist_manifest(instructions: List[str]) -> Tuple[List[str], List[str]]:
     return out, ["CACHE_ORDER_HOIST"]
 
 
-def drop_root(instructions: List[str]) -> Tuple[List[str], List[str]]:
-    """Insert a non-root USER ahead of the entrypoint when none is declared."""
-    if any(_keyword(x) == "USER" for x in instructions):
-        return instructions, []
+def drop_root(instructions: list[str]) -> Transform:
+    """Ensure the *final* stage runs unprivileged.
 
-    out = list(instructions)
+    A USER in a builder stage protects nothing, so only the shipped stage counts.
+    """
+    start = _final_stage_slice(instructions)
+    final = instructions[start:]
+    users = [i for i, x in enumerate(final) if _keyword(x) == "USER"]
+
+    if users:
+        last = users[-1]
+        if _argument(final[last]).lower() not in ROOT_USERS:
+            return instructions, []
+        out = list(instructions)
+        out[start + last] = f"USER {NONROOT_UID}"
+        return out, ["LEAST_PRIVILEGE_DEROOT"]
+
     entry = next(
-        (i for i, x in enumerate(out) if _keyword(x) in ("CMD", "ENTRYPOINT")), len(out)
+        (i for i, x in enumerate(final) if _keyword(x) in ("CMD", "ENTRYPOINT")), len(final)
     )
-    out.insert(entry, f"USER {NONROOT_UID}")
+    out = list(instructions)
+    out.insert(start + entry, f"USER {NONROOT_UID}")
     return out, ["LEAST_PRIVILEGE_USER"]
 
 
-def split_multistage(instructions: List[str]) -> Tuple[List[str], List[str], List[str]]:
+def split_multistage(instructions: list[str]) -> tuple[list[str], list[str], list[str]]:
     """Split a single-stage pip build into builder + lean runtime stages.
 
     Fires only on the pattern it can rewrite faithfully: one FROM, one
@@ -107,10 +162,10 @@ def split_multistage(instructions: List[str]) -> Tuple[List[str], List[str], Lis
     if install is None:
         return instructions, [], ["MULTISTAGE: no pip dependency layer to isolate"]
 
-    base = _image_token(instructions[froms[0]])
+    base, _ = image_reference(_argument(instructions[froms[0]]))
     manifest = _pip_manifest(instructions[install])
     workdir = next(
-        (_argument(x) for x in instructions[: install][::-1] if _keyword(x) == "WORKDIR"),
+        (_argument(x) for x in instructions[:install][::-1] if _keyword(x) == "WORKDIR"),
         DEFAULT_WORKDIR,
     )
 
@@ -133,23 +188,30 @@ def split_multistage(instructions: List[str]) -> Tuple[List[str], List[str], Lis
     return builder + remainder, ["MULTISTAGE_SPLIT"], []
 
 
-def _render(instructions: List[str]) -> str:
-    """Join instructions, blank-separating each stage so output re-parses identically."""
-    lines: List[str] = []
+def _render(instructions: list[str], originals: dict[str, str]) -> str:
+    """Join instructions, blank-separating each stage so output re-parses identically.
+
+    An instruction no transform touched is re-emitted from its original source, so
+    a hand-formatted multi-line RUN survives the rewrite instead of being
+    collapsed onto one line.
+    """
+    lines: list[str] = []
     for instruction in instructions:
         if _keyword(instruction) == "FROM" and lines:
             lines.append("")
-        lines.append(instruction)
+        lines.append(originals.get(instruction, instruction))
     return "\n".join(lines).strip() + "\n"
 
 
-def refactor_dockerfile(content: str) -> Dict[str, object]:
+def refactor_dockerfile(content: str) -> dict[str, Any]:
     """Run every transform in order and return the rewritten Dockerfile."""
-    instructions = [text for _, text in _logical_lines(content)]
-    notes: List[str] = []
-    applied: List[str] = []
+    doc = parse(content)
+    instructions = [i.text for i in doc.instructions]
+    originals = {i.text: i.source for i in doc.instructions if i.source}
+    notes: list[str] = []
+    applied: list[str] = []
 
-    for transform in (harden_apt, hoist_manifest, drop_root):
+    for transform in (harden_apt, harden_pip, add_to_copy, hoist_manifest, drop_root):
         instructions, done = transform(instructions)
         applied.extend(done)
 
@@ -157,20 +219,30 @@ def refactor_dockerfile(content: str) -> Dict[str, object]:
     applied.extend(done)
     notes.extend(skipped)
 
-    unpinned = [
-        _image_token(x)
-        for x in instructions
-        if _keyword(x) == "FROM" and _image_token(x).endswith(":latest")
-    ]
+    aliases = {s.alias for s in doc.stages if s.alias}
+    unpinned = sorted(
+        {
+            image
+            for image in (
+                image_reference(_argument(x))[0]
+                for x in instructions
+                if _keyword(x) == "FROM"
+            )
+            if image and image not in aliases and image != "scratch"
+            and (image.endswith(":latest") or ":" not in image.rsplit("/", 1)[-1])
+        }
+    )
     if unpinned:
         notes.append(
             "PINNED_VERSION: "
-            + ", ".join(sorted(set(unpinned)))
+            + ", ".join(unpinned)
             + " left untouched — choosing a replacement tag needs a human."
         )
 
+    header = [f"# {k}={v}" for k, v in doc.directives.items()]
+    body = _render(instructions, originals)
     return {
-        "dockerfile": _render(instructions),
+        "dockerfile": ("\n".join(header) + "\n" + body) if header else body,
         "transformations": applied,
         "skipped": notes,
     }

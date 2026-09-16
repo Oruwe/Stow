@@ -5,17 +5,54 @@ on:
     branches: ["**"]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install toolchain
+        run: pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check .
+      - name: Type check
+        run: mypy app
+      - name: Test
+        run: pytest
+
+  self-audit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Run tests
-        run: pytest -q
-      - name: Self-audit (agent gates its own examples)
-        run: ./stow analyze examples/Dockerfile.good
+      - run: pip install -e .
+      - name: Gate this repo's own Dockerfile
+        run: stow analyze Dockerfile
+      - name: Refactor must be a no-op on an already-optimal file
+        run: stow refactor examples/Dockerfile.good --check
+      - name: Known-bad example must be caught
+        run: |
+          if stow analyze examples/Dockerfile.bad; then
+            echo "::error::the linter failed to flag the known-bad example"
+            exit 1
+          fi
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the agent image
+        run: docker build -t dockerfile-optimizer:ci .
+      - name: Run the agent from the image
+        run: docker run --rm -v "$PWD:/work:ro" dockerfile-optimizer:ci analyze /work/Dockerfile

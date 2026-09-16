@@ -1,96 +1,24 @@
-"""CLI entry point for dockerfile-optimizer.
+"""Backwards-compatible entry point: `python -m app.main` still works."""
+from __future__ import annotations
 
-Invoked as `stow <command>`:
-
-    stow analyze [PATH]   audit a Dockerfile and emit JSON findings
-    stow refactor [PATH]  rewrite a Dockerfile; --write edits it in place
-    stow rules            list the rule IDs this agent enforces
-    stow version          print the agent version
-"""
 import sys
-import json
+from collections.abc import Sequence
 
-from app import __version__
-from app.refactor import refactor_dockerfile
-from app.rules import analyze_dockerfile
-
-RULES = {
-    "PINNED_VERSION": "Base image must pin a tag or digest, never ':latest'.",
-    "CACHE_CLEANUP": "apt-get install must clean /var/lib/apt/lists/* in the same layer.",
-    "LEAST_PRIVILEGE": "A USER instruction must drop the container off root.",
-}
-
-USAGE = "usage: stow {analyze [PATH] | refactor [PATH] [--write] | rules | version}"
+from app.cli import main as cli_main
 
 
-def run(file_path: str = "Dockerfile") -> int:
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read()
-    except FileNotFoundError:
-        print(json.dumps({"error": f"File '{file_path}' not found."}))
-        return 1
-
-    findings = analyze_dockerfile(content)
-    output = {
-        "status": "PASSED" if not findings else "OPTIMIZATION_NEEDED",
-        "target": file_path,
-        "total_findings": len(findings),
-        "details": findings,
-    }
-    print(json.dumps(output, indent=2))
-    return 0 if not findings else 2
-
-
-def refactor(file_path: str = "Dockerfile", write: bool = False) -> int:
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read()
-    except FileNotFoundError:
-        print(json.dumps({"error": f"File '{file_path}' not found."}))
-        return 1
-
-    result = refactor_dockerfile(content)
-    if write:
-        with open(file_path, "w", encoding="utf-8") as f:
-            f.write(result["dockerfile"])
-        print(json.dumps({
-            "status": "REWRITTEN",
-            "target": file_path,
-            "transformations": result["transformations"],
-            "skipped": result["skipped"],
-        }, indent=2))
-        return 0
-
-    print(result["dockerfile"], end="")
-    for note in result["skipped"]:
-        print(f"# skipped -> {note}", file=sys.stderr)
-    return 0
-
-
-def main(argv: list) -> int:
-    command = argv[0] if argv else "analyze"
-
-    if command in ("-h", "--help", "help"):
-        print(USAGE)
-        return 0
-    if command in ("version", "--version"):
-        print(json.dumps({"name": "dockerfile-optimizer", "version": __version__}))
-        return 0
-    if command == "rules":
-        print(json.dumps(RULES, indent=2))
-        return 0
-    if command == "analyze":
-        return run(argv[1] if len(argv) > 1 else "Dockerfile")
-    if command == "refactor":
-        args = argv[1:]
-        write = "--write" in args
-        targets = [a for a in args if not a.startswith("-")]
-        return refactor(targets[0] if targets else "Dockerfile", write=write)
-
-    print(USAGE, file=sys.stderr)
-    return 64
+def main(argv: Sequence[str] | None = None) -> int:
+    argv = list(argv) if argv is not None else sys.argv[1:]
+    # `stow Dockerfile` used to mean `stow analyze Dockerfile`.
+    if argv and not argv[0].startswith("-") and argv[0] not in (
+        "analyze",
+        "refactor",
+        "rules",
+        "version",
+    ):
+        argv = ["analyze", *argv]
+    return cli_main(argv)
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(main())

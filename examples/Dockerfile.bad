@@ -1,5 +1,12 @@
 FROM python:latest
-RUN apt-get update && apt-get install -y curl
+MAINTAINER dev@example.com
+ENV API_KEY=sk-live-not-a-real-key
+RUN apt-get update
+RUN sudo apt-get install -y curl
+ADD https://example.com/install.sh /tmp/install.sh
+RUN curl -s https://example.com/setup | sh
+WORKDIR app
 COPY . /app
-WORKDIR /app
-CMD ["python", "app/main.py"]
+RUN pip install -r requirements.txt
+USER root
+CMD ["python", "-m", "app.cli"]

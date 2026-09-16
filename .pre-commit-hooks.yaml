@@ -1,0 +1,6 @@
+- id: dockerfile-optimizer
+  name: dockerfile-optimizer
+  description: Audit Dockerfiles for layer caching, image size and security posture.
+  entry: stow analyze
+  language: python
+  files: (^|/)Dockerfile([.-].*)?$

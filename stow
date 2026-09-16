@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Thin launcher so the agent is driven as `stow <command>`.
+# Thin launcher so the agent is driven as `stow <command>` from a checkout.
+# Deliberately does not cd: relative paths must resolve against the caller's
+# working directory, not the repository root.
 set -euo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")"
-exec python3 -m app.main "$@"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec env PYTHONPATH="${ROOT}${PYTHONPATH:+:${PYTHONPATH}}" python3 -m app.cli "$@"
