@@ -22,7 +22,16 @@ EXIT_FINDINGS = 1
 
 
 def _read(path: str) -> str:
-    return Path(path).read_text(encoding="utf-8")
+    """Read a Dockerfile, normalising the directory case across platforms.
+
+    Linux raises IsADirectoryError when opening a directory; Windows raises
+    PermissionError. Checking first means the caller sees the same error, and
+    the same message, everywhere.
+    """
+    target = Path(path)
+    if target.is_dir():
+        raise IsADirectoryError(path)
+    return target.read_text(encoding="utf-8")
 
 
 def _summarise(findings: list[dict[str, Any]]) -> dict[str, int]:

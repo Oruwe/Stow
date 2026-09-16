@@ -10,5 +10,6 @@ RUN apt-get update \
 COPY --from=builder /install /usr/local
 WORKDIR /app
 COPY . /app
+HEALTHCHECK NONE
 USER 1001
 CMD ["python", "-m", "app.main", "analyze"]
