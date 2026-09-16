@@ -17,13 +17,20 @@ SEVERITY_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 CLEANUP_MARKERS = ("rm -rf /var/lib/apt/lists", "apt-get clean", "rm -rf /var/cache/apt")
 DEPENDENCY_INSTALLS = (
     "pip install",
+    "uv sync",
+    "uv pip install",
+    "pdm install",
     "npm ci",
     "npm install",
+    "pnpm install",
     "yarn install",
     "poetry install",
     "bundle install",
+    "composer install",
+    "cargo fetch",
     "go mod download",
 )
+LOCKFILE_FLAGS = ("--frozen", "--locked", "--frozen-lockfile")
 SECRET_KEY_RE = re.compile(
     r"(PASSWORD|PASSWD|SECRET|TOKEN|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CREDENTIAL)",
     re.IGNORECASE,
@@ -239,6 +246,29 @@ def check_cache_order(doc: Dockerfile) -> Iterable[Finding]:
             "Source is copied before dependencies are installed, so any code edit "
             "invalidates the dependency layer.",
             "Copy the manifest and install first, then COPY the rest of the source.",
+        )
+
+
+@rule("LOCKFILE_FALLBACK", "medium", "A || fallback must not discard the lockfile.")
+def check_lockfile_fallback(doc: Dockerfile) -> Iterable[Finding]:
+    """`uv sync --frozen || uv sync` silently abandons the pin it just asked for."""
+    for instruction in _shell_instructions(doc):
+        body = instruction.body
+        if "||" not in body:
+            continue
+        primary, _, fallback = body.partition("||")
+        if not any(flag in primary for flag in LOCKFILE_FLAGS):
+            continue
+        if any(flag in fallback for flag in LOCKFILE_FLAGS):
+            continue
+        yield Finding(
+            "LOCKFILE_FALLBACK",
+            "medium",
+            instruction.line,
+            instruction.stage,
+            "Layer falls back to an unlocked install when the locked one fails, "
+            "so a stale lockfile silently yields a different dependency set.",
+            "Let the build fail instead, and update the lockfile deliberately.",
         )
 
 

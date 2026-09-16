@@ -190,3 +190,33 @@ def test_findings_carry_line_stage_and_remediation():
     assert finding["line"] == 1
     assert finding["stage"] == 1
     assert finding["remediation"]
+
+
+def test_uv_sync_is_recognised_as_a_dependency_install():
+    """uv is common now; not knowing it meant CACHE_ORDER never ran on those files."""
+    content = "FROM x:1\nCOPY . /app\nRUN uv sync --frozen\nUSER 1\n"
+    assert "CACHE_ORDER" in blocking(analyze_dockerfile(content))
+
+
+def test_correct_uv_ordering_passes():
+    content = (
+        "FROM x:1\nCOPY pyproject.toml uv.lock ./\nRUN uv sync --frozen\n"
+        "COPY src ./src\nUSER 1\n"
+    )
+    assert "CACHE_ORDER" not in blocking(analyze_dockerfile(content))
+
+
+def test_lockfile_fallback_is_flagged():
+    """`uv sync --frozen || uv sync` abandons the pin it just asked for."""
+    content = "FROM x:1\nRUN uv sync --frozen --no-dev || uv sync --no-dev\nUSER 1\n"
+    assert "LOCKFILE_FALLBACK" in blocking(analyze_dockerfile(content))
+
+
+def test_fallback_that_keeps_the_lock_is_not_flagged():
+    content = "FROM x:1\nRUN uv sync --frozen || uv sync --frozen --refresh\nUSER 1\n"
+    assert "LOCKFILE_FALLBACK" not in blocking(analyze_dockerfile(content))
+
+
+def test_plain_or_fallback_without_a_lock_flag_is_ignored():
+    content = "FROM x:1\nRUN make test || echo failed\nUSER 1\n"
+    assert "LOCKFILE_FALLBACK" not in blocking(analyze_dockerfile(content))

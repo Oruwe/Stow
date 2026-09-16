@@ -33,6 +33,14 @@ class Instruction:
     author wrote them instead of collapsing their formatting.
     """
 
+    leading: list[str] = field(default_factory=list)
+    """Comment and blank lines immediately above, verbatim.
+
+    A comment belongs to the instruction it introduces. Dropping these on a
+    rewrite destroys the reasoning the author wrote down, which is usually the
+    only place it exists.
+    """
+
     @property
     def text(self) -> str:
         return f"{self.keyword} {self.argument}".strip()
@@ -62,6 +70,8 @@ class Dockerfile:
     directives: dict[str, str] = field(default_factory=dict)
     instructions: list[Instruction] = field(default_factory=list)
     stages: list[Stage] = field(default_factory=list)
+    trailing: list[str] = field(default_factory=list)
+    """Comment and blank lines after the last instruction."""
 
     @property
     def final_stage(self) -> Stage | None:
@@ -114,6 +124,7 @@ def parse(content: str) -> Dockerfile:
 
     doc = Dockerfile(directives=directives)
     buffer: list[str] = []
+    trivia: list[str] = []
     start = 0
     index = 0
 
@@ -122,9 +133,12 @@ def parse(content: str) -> Dockerfile:
         stripped = raw.strip()
         index += 1
 
-        # Comments and blanks are skipped outright, and are also legal *inside* a
-        # continuation, where Docker drops them without ending the instruction.
+        # Comments and blanks are legal *inside* a continuation, where Docker
+        # drops them without ending the instruction. Outside one they belong to
+        # whatever instruction follows, so they are kept for the rewriter.
         if not stripped or stripped.startswith("#"):
+            if not buffer:
+                trivia.append(raw.rstrip())
             continue
 
         if not buffer:
@@ -158,7 +172,9 @@ def parse(content: str) -> Dockerfile:
             raw=text,
             heredoc=heredoc,
             source="\n".join(lines[start - 1 : index]),
+            leading=trivia,
         )
+        trivia = []
 
         if keyword == "FROM":
             image, alias = image_reference(argument)
@@ -178,6 +194,7 @@ def parse(content: str) -> Dockerfile:
             Instruction(keyword, argument, start, len(lines), len(doc.stages), text)
         )
 
+    doc.trailing = trivia
     if doc.stages:
         doc.stages[-1].is_final = True
     return doc

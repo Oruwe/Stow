@@ -159,3 +159,68 @@ def test_modified_multiline_run_is_still_rewritten():
 def test_heredoc_instruction_survives_a_rewrite():
     source = "FROM python:3.11-slim\nRUN <<EOF\necho hello\nEOF\nUSER 1001\n"
     assert "echo hello" in str(refactor_dockerfile(source)["dockerfile"])
+
+
+COMMENTED = """# Why this image exists.
+# Second line of the reason.
+FROM python:3.11-slim
+
+# Explains the ENV below.
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+RUN apt-get update && apt-get install -y curl
+HEALTHCHECK NONE
+USER 1001
+CMD ["python", "-m", "app"]
+"""
+
+
+def test_comments_survive_a_rewrite():
+    """Comments are usually the only place the reasoning exists. Losing them on
+    --write is data loss, not a formatting nit."""
+    result = refactor_dockerfile(COMMENTED)
+    out = str(result["dockerfile"])
+    for comment in ("# Why this image exists.", "# Second line of the reason.",
+                    "# Explains the ENV below."):
+        assert comment in out
+
+
+def test_comment_stays_attached_to_its_instruction():
+    out = str(refactor_dockerfile(COMMENTED)["dockerfile"]).splitlines()
+    assert out[out.index("# Explains the ENV below.") + 1].startswith("ENV ")
+
+
+def test_blank_line_grouping_survives():
+    assert "" in str(refactor_dockerfile(COMMENTED)["dockerfile"]).splitlines()
+
+
+def test_untouched_commented_file_is_byte_identical():
+    """A file with nothing to fix must come back exactly as written."""
+    source = COMMENTED.replace(
+        "RUN apt-get update && apt-get install -y curl",
+        "RUN apt-get update && apt-get install -y --no-install-recommends curl"
+        " && rm -rf /var/lib/apt/lists/*",
+    )
+    result = refactor_dockerfile(source)
+    assert result["transformations"] == []
+    assert str(result["dockerfile"]) == source
+
+
+def test_moved_instruction_carries_its_comment():
+    """hoist_manifest reorders; the comment must travel with the instruction."""
+    source = (
+        "FROM python:3.11-slim\n"
+        "WORKDIR /app\n"
+        "# copies the application source\n"
+        "COPY . /app\n"
+        "RUN pip install --no-cache-dir -r requirements.txt\n"
+        "USER 1001\n"
+    )
+    out = str(refactor_dockerfile(source)["dockerfile"]).splitlines()
+    assert out[out.index("# copies the application source") + 1].startswith("COPY . ")
+
+
+def test_syntax_directive_is_not_duplicated():
+    out = str(refactor_dockerfile("# syntax=docker/dockerfile:1\nFROM x:1\nUSER 1\n")["dockerfile"])
+    assert out.count("# syntax=") == 1
