@@ -1,0 +1,4 @@
+# Keep line endings correct per platform regardless of core.autocrlf.
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf

@@ -4,15 +4,28 @@ A container-optimization micro-agent. It parses a Dockerfile into a structured
 model, audits it for caching, size and security problems, and mechanically
 rewrites the ones it can fix without guessing.
 
-Zero runtime dependencies — a CI gate should not drag a dependency tree into
-every build it guards.
+Requires Python 3.10 or newer. No runtime dependencies on 3.11+; on 3.10 it pulls
+in `tomli` alone, because a CI gate should not drag a dependency tree into every
+build it guards.
 
 ## Install
 
 ```bash
-pip install -e .          # provides the `stow` command
-./stow --help             # or run straight from a checkout
+pip install -e ".[dev]"   # provides the `stow` command plus the test toolchain
+stow --help
 ```
+
+Running straight from a checkout, without installing:
+
+```bash
+./stow --help             # macOS / Linux
+.\stow.cmd --help         # Windows (PowerShell or cmd)
+python -m app.cli --help  # any platform
+```
+
+On Windows, if `stow` or `pytest` is "not recognized" after installing, your
+Python `Scripts` directory is not on `PATH`. Use `python -m app.cli` and
+`python -m pytest`, or reinstall Python with **Add python.exe to PATH** ticked.
 
 ## Commands
 
@@ -134,6 +147,8 @@ As a pre-commit hook:
 pip install -e ".[dev]"
 ruff check . && mypy app && pytest
 ```
+
+On Windows, prefix with the interpreter: `python -m pytest`, `python -m ruff check .`.
 
 The agent gates itself: CI runs `stow analyze Dockerfile` against this repo's own
 image definition, and `stow refactor examples/Dockerfile.good --check` proves the
