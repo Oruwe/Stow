@@ -7,7 +7,7 @@ name = "dockerfile-optimizer"
 version = "1.0.0"
 description = "Audit and refactor Dockerfiles for layer caching, image size and security posture."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = { text = "MIT" }
 keywords = ["docker", "dockerfile", "linter", "security", "sarif", "devops"]
 classifiers = [
@@ -15,9 +15,9 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Topic :: Software Development :: Quality Assurance",
 ]
-# Deliberately zero runtime dependencies: a CI gate should not drag a
-# dependency tree into every build it guards.
-dependencies = []
+# No runtime dependencies on 3.11+, where tomllib is in the standard library.
+# A CI gate should not drag a dependency tree into every build it guards.
+dependencies = ['tomli>=2.0.1; python_version < "3.11"']
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0.0", "ruff>=0.4.0", "mypy>=1.8.0"]
@@ -35,13 +35,13 @@ addopts = "-q"
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "C4", "SIM"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.10"
 warn_unused_ignores = true
 disallow_untyped_defs = false
 ignore_missing_imports = true

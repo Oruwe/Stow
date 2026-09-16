@@ -24,6 +24,15 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   the agent's own audit, and a `.pre-commit-hooks.yaml` hook definition.
 
 ### Fixed
+- Lowered the supported Python floor to 3.10. The 3.11 requirement made the
+  package uninstallable on a common interpreter, including the author's own
+  machine; `tomli` is now pulled in only where the standard library lacks
+  `tomllib`.
+- Added `stow.cmd` so the launcher works in PowerShell and cmd. The `stow`
+  script is bash and cannot run on Windows without WSL or Git Bash.
+- Added `.gitattributes` pinning `.cmd` to CRLF and everything else to LF, so a
+  checkout with `core.autocrlf` set either way still produces a runnable
+  launcher.
 - `LEAST_PRIVILEGE` now evaluates only the final stage. A `USER` in a builder
   stage does not reach the shipped image and no longer suppresses the finding.
 - `USER root` and `USER 0` in the final stage are flagged rather than accepted as

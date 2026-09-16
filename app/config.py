@@ -5,10 +5,15 @@ tool, so settings come from a file in the repo and are overridden by CLI flags.
 """
 from __future__ import annotations
 
-import tomllib
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # pragma: no cover - 3.10 uses the backport, declared in pyproject
+    import tomli as tomllib
 
 CONFIG_FILENAME = ".dockerfile-optimizer.toml"
 PYPROJECT = "pyproject.toml"

@@ -2,8 +2,6 @@ import pytest
 
 from app.config import ConfigError, load
 
-pytest.importorskip("tomllib", reason="config needs a TOML parser")
-
 
 def test_defaults_when_no_config_present(tmp_path):
     config = load(tmp_path)
