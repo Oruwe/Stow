@@ -11,7 +11,7 @@ from typing import Any
 from app import __version__
 from app.rules import SEVERITY_ORDER, rule_catalog
 
-TOOL_URI = "https://github.com/Oruwe/Stow"
+TOOL_URI = "https://github.com/Oruwe/dockerfile-optimizer"
 SARIF_LEVEL = {
     "critical": "error",
     "high": "error",
