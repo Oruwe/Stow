@@ -187,6 +187,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_INPUT
     except BrokenPipeError:  # piping into head/less is normal usage
         return EXIT_OK
+    except UnicodeDecodeError:
+        print(f"stow: '{args.path}' is not UTF-8 text.", file=sys.stderr)
+        return EXIT_INPUT
+    except OSError as error:
+        # Every case above is an OSError subclass, and enumerating them left
+        # everything else to surface as a traceback: a path with characters the
+        # filesystem rejects raises EINVAL on Windows, not FileNotFoundError.
+        # A CLI must never show a traceback for bad input.
+        print(f"stow: cannot read '{args.path}': {error.strerror or error}.", file=sys.stderr)
+        return EXIT_INPUT
 
 
 if __name__ == "__main__":
