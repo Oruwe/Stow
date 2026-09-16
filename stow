@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Thin launcher so the agent is driven as `stow <command>`.
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
+exec python3 -m app.main "$@"

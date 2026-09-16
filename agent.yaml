@@ -1,0 +1,4 @@
+spec_version: 0.1.0
+name: dockerfile-optimizer
+version: "1.0.0"
+description: Autonomous developer tool that analyzes Dockerfiles to optimize layer caching, multi-stage builds, and security posture.
