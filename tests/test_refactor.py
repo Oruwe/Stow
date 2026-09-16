@@ -117,10 +117,11 @@ def test_refactor_is_idempotent():
 
 
 def test_already_optimal_file_is_unchanged():
+    """The shipped example must be exemplary: zero findings, not merely passing."""
     source = Path("examples/Dockerfile.good").read_text(encoding="utf-8")
     result = refactor_dockerfile(source)
     assert "MULTISTAGE_SPLIT" not in result["transformations"]
-    assert blocking(analyze_dockerfile(str(result["dockerfile"]))) == []
+    assert analyze_dockerfile(str(result["dockerfile"])) == []
 
 
 MULTILINE_CLEAN = """FROM python:3.11-slim

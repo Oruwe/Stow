@@ -24,6 +24,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   the agent's own audit, and a `.pre-commit-hooks.yaml` hook definition.
 
 ### Fixed
+- `analyze`/`refactor` on a directory now report "is a directory, not a
+  Dockerfile" on every platform. Linux raises `IsADirectoryError` when opening
+  a directory and Windows raises `PermissionError`, so relying on the OS's
+  choice of exception gave Windows users a misleading "is not readable".
+- CI runs the suite on Windows as well as Linux. The bug above shipped because
+  every job ran on ubuntu, and no amount of Linux coverage can catch a
+  divergence that only exists off Linux.
+- `examples/Dockerfile.good` declares `HEALTHCHECK NONE`, so the shipped
+  example now has zero findings rather than one non-blocking one. An example
+  named "good" should be exemplary, not merely passing.
 - Lowered the supported Python floor to 3.10. The 3.11 requirement made the
   package uninstallable on a common interpreter, including the author's own
   machine; `tomli` is now pulled in only where the standard library lacks

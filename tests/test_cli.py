@@ -58,7 +58,18 @@ def test_missing_file_reports_cleanly(dockerfile, capsys):
 
 
 def test_directory_argument_reports_cleanly(tmp_path, capsys):
+    """Same message on every platform.
+
+    Linux raises IsADirectoryError opening a directory, Windows raises
+    PermissionError, so relying on the OS's choice gave Windows users a
+    misleading "not readable".
+    """
     assert main(["analyze", str(tmp_path)]) == EXIT_INPUT
+    assert "not a Dockerfile" in capsys.readouterr().err
+
+
+def test_directory_argument_reports_cleanly_for_refactor(tmp_path, capsys):
+    assert main(["refactor", str(tmp_path)]) == EXIT_INPUT
     assert "not a Dockerfile" in capsys.readouterr().err
 
 
