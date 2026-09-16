@@ -48,7 +48,7 @@ Exit codes: `0` clean, `1` findings at or above the threshold, `2` usage error,
 
 ## Rules
 
-Fourteen rules, each with a severity. `--fail-on` decides which ones break a build
+Fifteen rules, each with a severity. `--fail-on` decides which ones break a build
 (default `medium`, so the `low` ones inform without blocking).
 
 | Severity | Rule | Catches |
@@ -61,6 +61,7 @@ Fourteen rules, each with a severity. `--fail-on` decides which ones break a bui
 | medium | `CACHE_CLEANUP` | apt layer that never cleans `/var/lib/apt/lists/*` |
 | medium | `APT_UPDATE_ISOLATED` | `apt-get update` alone in a layer, served stale from cache |
 | medium | `CACHE_ORDER` | Source copied before dependencies install |
+| medium | `LOCKFILE_FALLBACK` | A `\|\|` fallback that discards `--frozen`/`--locked` |
 | medium | `PIPE_WITHOUT_PIPEFAIL` | Pipeline that discards an upstream failure |
 | low | `ADD_OVER_COPY` | `ADD` where `COPY` is clearer |
 | low | `PIP_NO_CACHE` | `pip install` leaving its wheel cache in the layer |
@@ -94,6 +95,11 @@ What it deliberately will not do:
   silently break the build.
 - **Split a multi-stage build it cannot rewrite faithfully.** `MULTISTAGE_SPLIT`
   fires on one `FROM` plus one `pip install -r`; other shapes are reported.
+
+Comments, blank-line grouping and hand-written formatting are preserved
+verbatim. A comment travels with the instruction it introduces even when a
+transform moves that instruction, because a comment is usually the only place
+the reasoning exists. A file with nothing to fix comes back byte-identical.
 
 Refactoring is idempotent — running it twice yields the same file, so `--write`
 does not churn diffs.

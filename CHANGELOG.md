@@ -6,6 +6,10 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [1.0.0]
 
 ### Added
+- `LOCKFILE_FALLBACK` rule: `uv sync --frozen || uv sync` abandons the pin it
+  just asked for, so a stale lockfile silently yields a different dependency set.
+- `uv`, `pdm`, `pnpm`, `composer` and `cargo` recognised as dependency
+  installers, so `CACHE_ORDER` evaluates files that do not use pip.
 - Structured Dockerfile parser handling parser directives (`# syntax`, `# escape`),
   custom escape characters, heredocs, comments embedded in continuations, and
   multi-stage indexing.
@@ -24,6 +28,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   the agent's own audit, and a `.pre-commit-hooks.yaml` hook definition.
 
 ### Fixed
+- `refactor` preserves comments and blank lines. It rebuilt the file from
+  instructions alone, so `--write` silently deleted every comment in a real
+  Dockerfile -- six of them, including the paragraph explaining why a model was
+  pre-fetched at build time. Comments now travel with the instruction they
+  introduce, even when a transform reorders it, and a file with nothing to fix
+  comes back byte-identical.
+- Parser directives are preserved verbatim rather than reconstructed, so
+  `# syntax=` keeps its original spelling and cannot be duplicated.
 - Any `OSError` now becomes a message instead of a traceback. The CLI caught
   `FileNotFoundError`, `IsADirectoryError` and `PermissionError` by name and
   let every other subclass crash -- a path containing characters the
