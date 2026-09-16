@@ -1,5 +1,10 @@
 # dockerfile-optimizer
 
+> **This project has moved to
+> [Oruwe/dockerfile-optimizer](https://github.com/Oruwe/dockerfile-optimizer).**
+> Development continues there. This repository is kept for its history and is
+> no longer updated.
+
 A container-optimization micro-agent. It parses a Dockerfile into a structured
 model, audits it for caching, size and security problems, and mechanically
 rewrites the ones it can fix without guessing.
