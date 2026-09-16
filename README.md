@@ -133,7 +133,7 @@ SARIF output uploads to GitHub code scanning, putting findings inline on the dif
 As a pre-commit hook:
 
 ```yaml
-- repo: https://github.com/Oruwe/Stow
+- repo: https://github.com/Oruwe/dockerfile-optimizer
   rev: main
   hooks:
     - id: dockerfile-optimizer

@@ -7,7 +7,7 @@ RUN pip install --no-cache-dir --prefix=/install .
 
 FROM python:3.11-slim
 LABEL org.opencontainers.image.title="dockerfile-optimizer"
-LABEL org.opencontainers.image.source="https://github.com/Oruwe/Stow"
+LABEL org.opencontainers.image.source="https://github.com/Oruwe/dockerfile-optimizer"
 COPY --from=builder /install /usr/local
 WORKDIR /work
 # A linter is a short-lived process; liveness is the caller's concern, and
